@@ -63,7 +63,7 @@ func (l *Lake[T]) NewStream() *Stream[T] {
 
 	l.controller.Go(func() error {
 		defer l.closedStreams.Add(1)
-		defer ch.close()
+		defer ch.Close()
 
 		for one := range ch.ch {
 			exit, err := l.execfunc(one)
