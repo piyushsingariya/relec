@@ -1,37 +1,36 @@
-package lake
+package safego
 
 import (
 	"context"
 	"fmt"
 	"sync/atomic"
 
-	"github.com/piyushsingariya/relec/safego"
 	"golang.org/x/sync/errgroup"
 )
 
-type Channel[T any] struct {
+type Stream[T any] struct {
 	cancel context.CancelFunc
 	ch     chan T
 }
 
-func (ch *Channel[T]) Insert(value T) {
+func (ch *Stream[T]) Insert(value T) {
 	ch.ch <- value
 }
 
-func (ch *Channel[T]) close() {
+func (ch *Stream[T]) close() {
 	ch.cancel()
-	safego.Close(ch.ch)
+	Close(ch.ch)
 }
 
 type Lake[T any] struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	closedChannels atomic.Int64
-	buffer         int
-	execfunc       func(one T) (exit bool, err error)
-	pool           []*Channel[T]
-	controller     *errgroup.Group
+	closedStreams atomic.Int64
+	buffer        int
+	execfunc      func(one T) (exit bool, err error)
+	pool          []*Stream[T]
+	controller    *errgroup.Group
 }
 
 func NewLake[T any](ctx context.Context, buffer int, exec func(one T) (exit bool, err error)) *Lake[T] {
@@ -39,18 +38,18 @@ func NewLake[T any](ctx context.Context, buffer int, exec func(one T) (exit bool
 	controller, _ := errgroup.WithContext(ctx)
 
 	return &Lake[T]{
-		ctx:            ctx,
-		cancel:         cancel,
-		buffer:         buffer,
-		execfunc:       exec,
-		controller:     controller,
-		closedChannels: atomic.Int64{},
+		ctx:           ctx,
+		cancel:        cancel,
+		buffer:        buffer,
+		execfunc:      exec,
+		controller:    controller,
+		closedStreams: atomic.Int64{},
 	}
 }
 
-func (l *Lake[T]) NewStream() *Channel[T] {
+func (l *Lake[T]) NewStream() *Stream[T] {
 	ctx, cancel := context.WithCancel(l.ctx)
-	ch := &Channel[T]{
+	ch := &Stream[T]{
 		cancel: cancel,
 	}
 	if l.buffer > 0 {
@@ -60,7 +59,7 @@ func (l *Lake[T]) NewStream() *Channel[T] {
 	}
 
 	l.controller.Go(func() error {
-		defer l.closedChannels.Add(1)
+		defer l.closedStreams.Add(1)
 
 		for {
 			select {
@@ -98,5 +97,5 @@ func (l *Lake[T]) Wait(cancel func(chan T) error) error {
 }
 
 func (l *Lake[T]) Stats() string {
-	return fmt.Sprintf("Completed: %d, Total: %d", int(l.closedChannels.Load()), len(l.pool))
+	return fmt.Sprintf("Completed: %d, Total: %d", int(l.closedStreams.Load()), len(l.pool))
 }
