@@ -47,19 +47,19 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 	semaphore := make(chan int, concurrency)
 
 	for one := range yield {
+		// hold loop till a slot is available
+	hold:
+		for {
+			select {
+			case semaphore <- 1:
+				break hold
+			case <-exit.Done():
+				return nil
+			}
+		}
+		
 		// schedule an execution
 		executor.Go(func() error {
-			// hold loop till a slot is available
-		hold:
-			for {
-				select {
-				case semaphore <- 1:
-					break hold
-				case <-exit.Done():
-					return nil
-				}
-			}
-
 			// schedule defering to enable an execution slot
 			defer func() {
 				<-semaphore
