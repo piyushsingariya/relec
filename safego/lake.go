@@ -10,17 +10,11 @@ import (
 )
 
 type Stream[T any] struct {
-	cancel context.CancelFunc
-	ch     chan T
+	ch chan T
 }
 
 func (ch *Stream[T]) Insert(value T) {
 	ch.ch <- value
-}
-
-func (ch *Stream[T]) close() {
-	ch.cancel()
-	Close(ch.ch)
 }
 
 type Lake[T any] struct {
@@ -56,10 +50,7 @@ func (l *Lake[T]) NewStream() *Stream[T] {
 		panic("new stream opened from closed lake")
 	}
 
-	ctx, cancel := context.WithCancel(l.ctx)
-	ch := &Stream[T]{
-		cancel: cancel,
-	}
+	ch := &Stream[T]{}
 	if l.buffer > 0 {
 		ch.ch = make(chan T, l.buffer)
 	} else {
@@ -69,21 +60,18 @@ func (l *Lake[T]) NewStream() *Stream[T] {
 	l.controller.Go(func() error {
 		defer l.closedStreams.Add(1)
 
-		for {
-			select {
-			case <-ctx.Done():
+		for one := range ch.ch {
+			exit, err := l.execfunc(one)
+			if err != nil {
+				return err
+			}
+			// if exit then exit
+			if exit {
 				return nil
-			case one := <-ch.ch:
-				exit, err := l.execfunc(one)
-				if err != nil {
-					return err
-				}
-				// if exit then exit
-				if exit {
-					return nil
-				}
 			}
 		}
+
+		return nil
 	})
 
 	l.poolmutex.Lock()
@@ -92,18 +80,12 @@ func (l *Lake[T]) NewStream() *Stream[T] {
 	return ch
 }
 
-func (l *Lake[T]) Wait(cancel func(chan T) error) error {
+func (l *Lake[T]) Wait() error {
 	l.closed = true
 	l.poolmutex.Lock()
 	defer l.poolmutex.Unlock()
-	defer func() {
-		for _, ch := range l.pool {
-			ch.close()
-		}
-	}()
-
 	for _, ch := range l.pool {
-		cancel(ch.ch)
+		close(ch.ch)
 	}
 
 	return l.controller.Wait()
