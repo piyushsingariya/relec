@@ -17,6 +17,10 @@ func (ch *Stream[T]) Insert(value T) {
 	ch.ch <- value
 }
 
+func (ch *Stream[T]) Close() {
+	Close(ch.ch)
+}
+
 type Lake[T any] struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -59,6 +63,7 @@ func (l *Lake[T]) NewStream() *Stream[T] {
 
 	l.controller.Go(func() error {
 		defer l.closedStreams.Add(1)
+		defer ch.close()
 
 		for one := range ch.ch {
 			exit, err := l.execfunc(one)
@@ -85,7 +90,7 @@ func (l *Lake[T]) Wait() error {
 	l.poolmutex.Lock()
 	defer l.poolmutex.Unlock()
 	for _, ch := range l.pool {
-		close(ch.ch)
+		ch.Close()
 	}
 
 	return l.controller.Wait()
