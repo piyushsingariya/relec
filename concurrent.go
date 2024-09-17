@@ -22,46 +22,44 @@ func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute 
 	return executor.Wait()
 }
 
-// func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(one T) error) error {
-// 	executor, ctx := errgroup.WithContext(ctx)
-// 	exit, cancel := context.WithCancel(ctx)
-// 	defer cancel()
+func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(one T) error) error {
+	executor, ctx := errgroup.WithContext(ctx)
+	executor.SetLimit(concurrency)
 
-// 	semaphore := make(chan int, concurrency)
+	// Channel to signal that all tasks have been scheduled
+	done := make(chan struct{})
 
-// 	for one := range yield {
-// 		// hold loop till a slot is available
-// 	hold:
-// 		for {
-// 			select {
-// 			case semaphore <- 1:
-// 				break hold
-// 			case <-exit.Done():
-// 				return nil
-// 			}
-// 		}
+	go func(){
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case one := <- yield:
+				// schedule an execution
+				executor.Go(func() error {
+					return execute(one)
+				})
+			}
+		}
+	}()
 
-// 		// schedule an execution
-// 		executor.Go(func() error {
-// 			// schedule defering to enable an execution slot
-// 			defer func() {
-// 				<-semaphore
-// 			}()
-// 			return execute(one)
-// 		})
-// 	}
+	// block the execution
+	select {
+	case <-done:
+		return executor.Wait()
+	case <-ctx.Done():
+		return executor.Wait()
+	}
+}
 
-// 	// block the execution
-// 	return executor.Wait()
-// }
+func Yield[T any](generate func(channel chan<- T)) <-chan T {
+	channel := make(chan T)
 
-// func Yield[T any](generate func(channel chan<- T)) <-chan T {
-// 	channel := make(chan T)
+	go func() {
+		defer close(channel)
+		generate(channel)
+	}()
 
-// 	go func() {
-// 		defer close(channel)
-// 		generate(channel)
-// 	}()
-
-// 	return channel
-// }
+	return channel
+}
