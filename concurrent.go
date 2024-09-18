@@ -6,15 +6,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute func(one T) error) error {
-	executor, _ := errgroup.WithContext(ctx)
+func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute func(ctx context.Context, one T) error) error {
+	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
 	for _, one := range array {
 		// schedule an execution
 		// hold loop till a slot is available
 		executor.Go(func() error {
-			return execute(one)
+			return execute(ctx, one)
 		})
 	}
 
@@ -22,23 +22,23 @@ func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute 
 	return executor.Wait()
 }
 
-func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(one T) error) error {
+func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(ctx context.Context, one T) error) error {
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
 	// Channel to signal that all tasks have been scheduled
 	done := make(chan struct{})
 
-	go func(){
+	go func() {
 		defer close(done)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case one := <- yield:
+			case one := <-yield:
 				// schedule an execution
 				executor.Go(func() error {
-					return execute(one)
+					return execute(ctx, one)
 				})
 			}
 		}
