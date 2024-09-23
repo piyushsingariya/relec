@@ -35,7 +35,10 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 			select {
 			case <-ctx.Done():
 				return
-			case one := <-yield:
+			case one, ok := <-yield:
+				if !ok {
+					return
+				}
 				// schedule an execution
 				executor.Go(func() error {
 					return execute(ctx, one)
