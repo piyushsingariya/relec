@@ -6,15 +6,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute func(ctx context.Context, one T) error) error {
+func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute func(ctx context.Context, one T, executionNumber int) error) error {
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
-	for _, one := range array {
+	for idx, one := range array {
 		// schedule an execution
 		// hold loop till a slot is available
 		executor.Go(func() error {
-			return execute(ctx, one)
+			return execute(ctx, one, idx+1)
 		})
 	}
 
@@ -22,7 +22,7 @@ func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute 
 	return executor.Wait()
 }
 
-func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(ctx context.Context, one T) error) error {
+func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(ctx context.Context, one T, executionNumber int) error) error {
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
@@ -31,6 +31,7 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 
 	go func() {
 		defer close(done)
+		execCount := 1 // execution count to track the executions
 		for {
 			select {
 			case <-ctx.Done():
@@ -41,8 +42,9 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 				}
 				// schedule an execution
 				executor.Go(func() error {
-					return execute(ctx, one)
+					return execute(ctx, one, execCount)
 				})
+				execCount++ // increase the execution count
 			}
 		}
 	}()
