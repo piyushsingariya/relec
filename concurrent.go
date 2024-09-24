@@ -23,7 +23,7 @@ func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute 
 	return executor.Wait()
 }
 
-func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(ctx context.Context, one T, executionNumber int) error) error {
+func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(ctx context.Context, one T, sequence int64) error) error {
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
@@ -41,10 +41,10 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 				if !ok {
 					return
 				}
-				execCount := counter.Add(1)
+				sequence := counter.Add(1)
 				// schedule an execution
 				executor.Go(func() error {
-					return execute(ctx, one, int(execCount))
+					return execute(ctx, one, sequence)
 				})
 			}
 		}
