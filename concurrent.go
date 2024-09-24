@@ -2,6 +2,7 @@ package relec
 
 import (
 	"context"
+	"sync/atomic"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -31,7 +32,7 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 
 	go func() {
 		defer close(done)
-		execCount := 1 // execution count to track the executions
+		counter := atomic.Int64{} // execution count to track the executions
 		for {
 			select {
 			case <-ctx.Done():
@@ -40,11 +41,11 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 				if !ok {
 					return
 				}
+				execCount := counter.Add(1)
 				// schedule an execution
 				executor.Go(func() error {
-					return execute(ctx, one, execCount)
+					return execute(ctx, one, int(execCount))
 				})
-				execCount++ // increase the execution count
 			}
 		}
 	}()
