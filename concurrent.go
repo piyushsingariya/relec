@@ -7,6 +7,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type CtxFunc = func(ctx context.Context) error
+
 func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute func(ctx context.Context, one T, executionNumber int) error) error {
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
@@ -16,6 +18,20 @@ func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute 
 		// hold loop till a slot is available
 		executor.Go(func() error {
 			return execute(ctx, one, idx+1)
+		})
+	}
+
+	// block the execution
+	return executor.Wait()
+}
+
+func ConcurrentF(ctx context.Context, functions ...CtxFunc) error {
+	executor, ctx := errgroup.WithContext(ctx)
+
+	for _, one := range functions {
+		// schedule an execution
+		executor.Go(func() error {
+			return one(ctx)
 		})
 	}
 
