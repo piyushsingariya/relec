@@ -39,7 +39,10 @@ func ConcurrentF(ctx context.Context, functions ...CtxFunc) error {
 	return executor.Wait()
 }
 
-func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, execute func(ctx context.Context, one T, sequence int64) error) error {
+func ConcurrentC[T any](ctx context.Context, next *Next[T], concurrency int, execute func(ctx context.Context, one T, sequence int64) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
@@ -49,14 +52,12 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 	go func() {
 		defer close(done)
 		counter := atomic.Int64{} // execution count to track the executions
-		for {
+		for next.Next() {
 			select {
 			case <-ctx.Done():
 				return
-			case one, ok := <-yield:
-				if !ok {
-					return
-				}
+			default:
+				one := next.curr
 				sequence := counter.Add(1)
 				// schedule an execution
 				executor.Go(func() error {
@@ -69,19 +70,91 @@ func ConcurrentC[T any](ctx context.Context, yield <-chan T, concurrency int, ex
 	// block the execution
 	select {
 	case <-done:
+		if next.err != nil {
+			return next.err
+		}
+
 		return executor.Wait()
 	case <-ctx.Done():
 		return executor.Wait()
 	}
 }
 
-func Yield[T any](generate func(channel chan<- T)) <-chan T {
-	channel := make(chan T)
+type Next[T any] struct {
+	closed bool
+	err    error
+	curr   T
+	next   func(curr T) (exit bool, one T, err error)
+}
 
-	go func() {
-		defer close(channel)
-		generate(channel)
-	}()
+func (n *Next[T]) Next() bool {
+	exit, next, err := n.next(n.curr)
+	if err != nil {
+		n.err = err
+		return false
+	}
+	if exit {
+		return false
+	}
 
-	return channel
+	n.curr = next
+	return true
+}
+
+func (n *Next[T]) Close() {
+	n.closed = true
+}
+
+func Yield[T any](next func(prev T) (bool, T, error)) *Next[T] {
+	return &Next[T]{
+		next: next,
+	}
+}
+
+type CxGroup struct {
+	done     chan int
+	ctx      context.Context
+	cancel   context.CancelFunc
+	executor *errgroup.Group
+}
+
+func NewCGroup(ctx context.Context) *CxGroup {
+	return newCGroup(ctx, 0)
+}
+
+func NewCGroupWithLimit(ctx context.Context, limit int) *CxGroup {
+	return newCGroup(ctx, limit)
+}
+
+func newCGroup(ctx context.Context, limit int) *CxGroup {
+	group := &CxGroup{
+		done: make(chan int),
+	}
+	_, group.cancel = context.WithCancel(ctx)
+	group.executor, group.ctx = errgroup.WithContext(ctx)
+	if limit > 0 {
+		group.executor.SetLimit(limit)
+	}
+
+	return group
+}
+
+func (g *CxGroup) Add(execute func(ctx context.Context) error) {
+	g.executor.Go(func() error {
+		return execute(g.ctx)
+	})
+}
+
+func (g *CxGroup) Close() {
+	close(g.done)
+}
+
+func (g *CxGroup) Block() error {
+	// block the execution
+	select {
+	case <-g.done:
+		return g.executor.Wait()
+	case <-g.ctx.Done():
+		return g.executor.Wait()
+	}
 }
