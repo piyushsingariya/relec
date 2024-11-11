@@ -112,9 +112,7 @@ func Yield[T any](next func(prev T) (bool, T, error)) *Next[T] {
 }
 
 type CxGroup struct {
-	done     chan int
 	ctx      context.Context
-	cancel   context.CancelFunc
 	executor *errgroup.Group
 }
 
@@ -127,10 +125,7 @@ func NewCGroupWithLimit(ctx context.Context, limit int) *CxGroup {
 }
 
 func newCGroup(ctx context.Context, limit int) *CxGroup {
-	group := &CxGroup{
-		done: make(chan int),
-	}
-	_, group.cancel = context.WithCancel(ctx)
+	group := &CxGroup{}
 	group.executor, group.ctx = errgroup.WithContext(ctx)
 	if limit > 0 {
 		group.executor.SetLimit(limit)
@@ -145,16 +140,15 @@ func (g *CxGroup) Add(execute func(ctx context.Context) error) {
 	})
 }
 
-func (g *CxGroup) Close() {
-	close(g.done)
+func (g *CxGroup) Block() error {
+	return g.executor.Wait()
 }
 
-func (g *CxGroup) Block() error {
-	// block the execution
-	select {
-	case <-g.done:
-		return g.executor.Wait()
-	case <-g.ctx.Done():
-		return g.executor.Wait()
+func ConcurrentInGroup[T any](group *CxGroup, array []T, concurrency int, execute func(ctx context.Context, one T) error) {
+	for _, one := range array {
+		// schedule an execution
+		group.Add(func(ctx context.Context) error {
+			return execute(ctx, one)
+		})
 	}
 }
