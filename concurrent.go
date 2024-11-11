@@ -144,7 +144,7 @@ func (g *CxGroup) Block() error {
 	return g.executor.Wait()
 }
 
-func ConcurrentInGroup[T any](group *CxGroup, array []T, concurrency int, execute func(ctx context.Context, one T) error) {
+func ConcurrentInGroup[T any](group *CxGroup, array []T, execute func(ctx context.Context, one T) error) {
 	for _, one := range array {
 		// schedule an execution
 		group.Add(func(ctx context.Context) error {
