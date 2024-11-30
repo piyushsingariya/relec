@@ -17,7 +17,7 @@ import (
 var (
 	memLockMutex  = sync.Mutex{}
 	memLockCond   = sync.NewCond(&memLockMutex)
-	lowMemTrigger = atomic.Bool{} // Flag to track low memory condition
+	isMemoryLow = atomic.Bool{} // Flag to track low memory condition
 )
 
 var (
@@ -216,8 +216,8 @@ func Lock(ctx context.Context) {
 	memLockMutex.Lock()
 	defer memLockMutex.Unlock()
 
-	// Wait until memory is above the threshold
-	for lowMemTrigger.Load() {
+	// Wait until memory is below the threshold
+	if isMemoryLow.Load() {
 		select {
 		case <-ctx.Done():
 			return
@@ -226,6 +226,29 @@ func Lock(ctx context.Context) {
 		}
 	}
 }
+
+// LockWithTrigger ensures only one execution of the memory checking process
+// and holds the code execution where the function is called
+func LockWithTrigger(ctx context.Context, triggerFunc func()) {
+	memLockMutex.Lock()
+	defer memLockMutex.Unlock()
+
+	// Wait until memory is below the threshold
+	if isMemoryLow.Load() {
+		// Call the triggerFunc only if the memory is still below the threshold
+		if triggerFunc != nil {
+			triggerFunc()
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			memLockCond.Wait()
+		}
+	}
+}
+
 
 func init() {
 	if !SkipCleanupRoutine {
@@ -239,11 +262,11 @@ func init() {
 				}
 
 				// If memory is below the threshold and the trigger isn't set, perform cleanup
-				if availableMemory <= BlockExecutionThreshold && !lowMemTrigger.Load() {
-					lowMemTrigger.Store(true)
+				if availableMemory <= BlockExecutionThreshold && !isMemoryLow.Load() {
+					isMemoryLow.Store(true)
 				} else if availableMemory > BlockExecutionThreshold {
 					// Reset trigger when memory is above the threshold
-					lowMemTrigger.Store(false)
+					isMemoryLow.Store(false)
 					memLockCond.Broadcast() // Notify all waiting goroutines
 				}
 				memLockMutex.Unlock()
