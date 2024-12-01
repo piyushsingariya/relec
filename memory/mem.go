@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,9 +16,9 @@ import (
 
 // Global mutex and condition variables
 var (
-	memLockMutex  = sync.Mutex{}
-	memLockCond   = sync.NewCond(&memLockMutex)
-	isMemoryLow = atomic.Bool{} // Flag to track low memory condition
+	memLockMutex = sync.Mutex{}
+	memLockCond  = sync.NewCond(&memLockMutex)
+	isMemoryLow  = atomic.Bool{} // Flag to track low memory condition
 )
 
 var (
@@ -188,6 +189,7 @@ func runGarbageCleanup() {
 		go func() {
 			defer gcTriggered.Unlock()
 			runtime.GC()
+			debug.FreeOSMemory()
 		}()
 	}
 }
@@ -248,7 +250,6 @@ func LockWithTrigger(ctx context.Context, triggerFunc func()) {
 		}
 	}
 }
-
 
 func init() {
 	if !SkipCleanupRoutine {
