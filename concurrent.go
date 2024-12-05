@@ -52,14 +52,17 @@ func ConcurrentC[T any](ctx context.Context, next *Next[T], concurrency int, exe
 	go func() {
 		defer close(done)
 		counter := atomic.Int64{} // execution count to track the executions
-		for next.Next() {
+		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
+				if !next.Next() {
+					return
+				}
 				one := next.curr
 				sequence := counter.Add(1)
-				// schedule an execution
+				// Schedule an execution
 				executor.Go(func() error {
 					return execute(ctx, one, sequence)
 				})
