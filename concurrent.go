@@ -13,12 +13,18 @@ func Concurrent[T any](ctx context.Context, array []T, concurrency int, execute 
 	executor, ctx := errgroup.WithContext(ctx)
 	executor.SetLimit(concurrency)
 
+main:
 	for idx, one := range array {
-		// schedule an execution
-		// hold loop till a slot is available
-		executor.Go(func() error {
-			return execute(ctx, one, idx+1)
-		})
+		select {
+		case <-ctx.Done():
+			break main
+		default:
+			// schedule an execution
+			// hold loop till a slot is available
+			executor.Go(func() error {
+				return execute(ctx, one, idx+1)
+			})
+		}
 	}
 
 	// block the execution
