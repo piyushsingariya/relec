@@ -158,3 +158,20 @@ func MaxDate(v1, v2 time.Time) time.Time {
 
 	return v2
 }
+
+
+// ReplaceWithASCII replaces characters in a string with their ASCII values,
+// except for alphanumeric characters, which remain unchanged.
+func ReplaceWithASCII(input string) string {
+	result := ""
+	for _, char := range input {
+		if unicode.IsLetter(char) || unicode.IsDigit(char) {
+			// Keep alphanumeric characters unchanged
+			result += string(char)
+		} else {
+			// Replace other characters with their ASCII values
+			result += strconv.Itoa(int(char))
+		}
+	}
+	return result
+}
