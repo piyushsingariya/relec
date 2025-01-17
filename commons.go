@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
+	"unicode"
 
 	"github.com/goccy/go-json"
 )
@@ -158,7 +160,6 @@ func MaxDate(v1, v2 time.Time) time.Time {
 
 	return v2
 }
-
 
 // ReplaceWithASCII replaces characters in a string with their ASCII values,
 // except for alphanumeric characters, which remain unchanged.
