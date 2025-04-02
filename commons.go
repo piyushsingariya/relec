@@ -176,3 +176,8 @@ func ReplaceWithASCII(input string) string {
 	}
 	return result
 }
+
+// IsPointer checks whether the given value is a pointer
+func IsPointer(v interface{}) bool {
+	return reflect.TypeOf(v).Kind() == reflect.Ptr
+}
