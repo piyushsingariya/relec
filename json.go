@@ -19,34 +19,26 @@ func IsJSON[T ~string | []byte](val T) bool {
 	return false
 }
 
-type JSON interface {
-	json.Unmarshaler
-	json.Marshaler
-
-	Any() (map[string]any, error)
-	Unmarshal(to any) error
-}
-
-type BaseJSON struct {
+type JSONString struct {
 	content string
 }
 
-func NewJSON(content string) JSON {
-	return &BaseJSON{
+func NewJSON(content string) JSONString {
+	return JSONString{
 		content: content,
 	}
 }
 
-func (j *BaseJSON) UnmarshalJSON(data []byte) error {
+func (j *JSONString) UnmarshalJSON(data []byte) error {
 	j.content = string(data)
 	return nil
 }
 
-func (j *BaseJSON) MarshalJSON() ([]byte, error) {
+func (j *JSONString) MarshalJSON() ([]byte, error) {
 	return []byte(j.content), nil
 }
 
-func (j *BaseJSON) Unmarshal(to any) error {
+func (j *JSONString) Unmarshal(to any) error {
 	if !IsPointer(to) {
 		return fmt.Errorf("pass pointer to a variable: passed %T", to)
 	}
@@ -54,8 +46,12 @@ func (j *BaseJSON) Unmarshal(to any) error {
 	return json.Unmarshal([]byte(j.content), to)
 }
 
-func (j *BaseJSON) Any() (map[string]any, error) {
+func (j *JSONString) Any() (map[string]any, error) {
 	to := make(map[string]any)
 
 	return to, json.Unmarshal([]byte(j.content), &to)
+}
+
+func (j *JSONString) String() string {
+	return j.content
 }
