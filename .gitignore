@@ -1,1 +1,6 @@
 /test/*
+ClickHouseLexer.interp
+ClickHouseLexer.tokens
+ClickHouseParser.interp
+ClickHouseParser.tokens
+.DS_Store
