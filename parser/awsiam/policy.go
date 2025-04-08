@@ -1,4 +1,4 @@
-package policy
+package awsiam
 
 import (
 	"bytes"
