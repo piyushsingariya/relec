@@ -7,5 +7,4 @@ require golang.org/x/sync v0.8.0
 require (
 	github.com/goccy/go-json v0.10.3
 	github.com/mitchellh/hashstructure v1.1.0
-	github.com/mitchellh/mapstructure v1.5.0
 )
